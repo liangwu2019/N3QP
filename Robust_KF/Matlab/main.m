@@ -1,123 +1,132 @@
-clear, clc, close;
-rng(20230914)
-N = 1000;
-lambda = 2;
-x0 = 5*ones(3,1);
-P0 = eye(3);
-Q = diag([1/40, 1/10, 1/5]);
-R = 0.5*eye(2);
 %%
-v = (randn(N,3)*chol(Q))'; % process noise
+clear, close all, clc
+Ts = 0.05;
+NSim = 200;
+TSim = NSim * Ts;
+Np = 10; % prediction horizon
 
-% Vector for full state history:
-x = zeros(3,N+1);
-x(:,1) = x0 + chol(P0)*randn(3,1);
+%% Define the continuous-time model
+Ac = [-.0151 -60.5651 0 -32.174;
+      -.0001 -1.3411 .9929 0;
+      .00018 43.2541 -.86939 0;
+      0      0       1      0];
+Bc = [-2.516 -13.136;
+      -.1689 -.2514;
+      -17.251 -1.5766;
+      0        0];
+Cc = [0 1 0 0;
+      0 0 0 1];
+Dc = [0 0;
+      0 0];
+sys = ss(Ac,Bc,Cc,Dc);
+model = c2d(sys,Ts);
+[nx,nu] = size(model.B);
 
-u = zeros(1,N);
-u(1,1:500) = 5*ones(1,500);
-u(1,501:end) = 2*ones(1,500);
+A_aug = [model.A, model.B; zeros(nu, nx), eye(nu)];
+B_aug = [model.B; eye(nu)];
+C_aug = [model.C, zeros(nu,nu)];
 
-alpha1 = 0.1;
-alpha2 = 0.5;
-alpha3 = 0.2;
-A = [1-alpha1, 0, 0; 
-     0, 1-alpha2, 0; 
-     alpha1, alpha2, 1-alpha3];
-B = [0.5;0.5;0];
+%% MPC-to-QP condense construction
+Wy = 10*eye(2);
+Wdu = 0.1*eye(2);
 
-% Vector for full measurement history:
-z = zeros(2,N+1);
-H = [1 0 0; 0 0 1];
-w = (randn(N+1,2)*chol(R))'; % measurement noise
-
-% Additional noise term: Simulate sensor failures
-y = zeros(N+1,2)';
-numberOfOnes = N/20;
-
-indexes = randperm(N);
-for i = 1:numberOfOnes
-   y(1,indexes(i)) = 25*randn;
+AiB = B_aug; BB = kron(eye(Np),AiB); 
+for i=1:Np-1
+    AiB = A_aug*AiB;
+    BB = BB+kron(diag(ones(Np-i,1),-i),AiB); 
 end
 
-indexes = randperm(N);
-for i = 1:numberOfOnes
-   y(2,indexes(i)) = 25*randn;
-end
-% Simulation
-for k=2:N+1
-    x(:,k) = A*x(:,k-1) + B*u(k-1) + v(:,k-1);
-    z(:,k) = H*x(:,k) + w(:,k) + y(:,k);
-end
+QQ = blkdiag(kron(eye(Np-1),C_aug'*Wy*C_aug),C_aug'*Wy*C_aug); 
+RR = kron(eye(Np),Wdu); 
+H =(BB'*QQ*BB + RR);
 
-%% KF
-x_hat = zeros(3,N+1);
-x_hat(:,1) = x0;
-P_hat = P0;
-R_inv = inv(R);
-for k=2:N+1
-    x_p = A*x_hat(:,k-1) + B*u(k-1);
-    P_p = A*P_hat*A' + Q;
+E_x = [0, 1, 0, 0, 0, 0;
+       0, 0, 0, 1, 0, 0;
+       0, 0, 0, 0, 1, 0;
+       0, 0, 0, 0, 0, 1];
+
+G = [kron(eye(Np),E_x)*BB; -kron(eye(Np),E_x)*BB];
+
+%% Closed-loop simulation
+ref = [0; 10];
+% x = zeros(nx,1);
+x = [0; 5; 0; 0]; % No feasible solution
+u = zeros(nu,1);
+
+Ref_Records = ref;
+U_Records = [];
+Y_Records = model.C*x;
+Runtime_Records = [];
+for k=1:NSim
+    if(mod(k,100)==0)
+        ref = [0; 0];
+    end
+    Ref_Records = [Ref_Records, ref];
+    %% finish uncompleted MPC-to-QP construction
+    x_aug = [x;u];
+    ei = A_aug*x_aug;
+    ee = ei;
+    gg = E_x * ei;
+    for i=2:Np
+        ei = A_aug*ei;
+        ee = [ee; ei];
+        gg = [gg; E_x*ei];
+    end
+    h = BB'*(QQ*ee-repmat(C_aug'*Wy*ref,Np,1));
+    g = [repmat([0.5;100;25;25],Np,1)-gg; gg - repmat([-0.5;-100;-25;-25],Np,1)];
+
+    rho = 1000*[repmat([1;1;10;10],Np,1); repmat([1;1;10;10],Np,1)];
+    M = G*inv(H)*G'; 
+    d = G*inv(H)*h + g;
+    H_dual = diag(rho)*M*diag(rho);
+    h_dual = diag(rho)*(M*rho+2*d);
+    tic
+    dual_result = N3_BoxQP(H_dual,h_dual,1e-6,0.3,0.15);
+    runtime = toc;
+    Runtime_Records = [Runtime_Records; runtime];
+    dU = -inv(H)*(h+0.5*G'*(rho.*dual_result+rho));
     
-    P_hat = inv(inv(P_p)+H'*R_inv*H);
-    x_hat(:,k) = x_p + P_hat*H'*R_inv*(z(:,k)-H*x_p);
+    %%
+    u = u+dU(1:nu);
+    x = model.A*x + model.B*u;
+    U_Records = [U_Records, u];
+    Y_Records = [Y_Records, model.C*x];
 end
-%% Robust KF
-x_hat_RKF = zeros(3,N+1);
-x_hat_RKF(:,1) = x0;
-P_hat_RKF = P0;
-for k=2:N+1
-    x_p_RKF = A*x_hat_RKF(:,k-1) + B*u(k-1);
-    P_p_RKF = A*P_hat_RKF*A' + Q;
-
-    % P_hat_RKF = P_p_RKF;
-    P_hat_RKF = inv(inv(P_p_RKF)+H'*R_inv*H);
-
-    L = P_hat_RKF*H'*inv(H*P_hat_RKF*H'+R);
-    myQ = (eye(2)-H*L)'*R_inv*(eye(2)-H*L)+L'*inv(P_hat_RKF)*L;
-    e_k = z(:,k)-H*x_p_RKF;
-
-    
-    H_inv = inv(myQ); H_inv = 0.5*(H_inv+H_inv');
-    f = myQ*e_k;
-    sol = N3_BoxQP(H_inv,-H_inv*f,1e-6,0.3,0.15);
-    sol = myQ\(f-sol);
-
-    x_hat_RKF(:,k) = x_p_RKF + L*(e_k-sol);
-end
-%%
-RMS_KF = zeros(3,N+1);
-for i=1:3
-    RMS_KF(i,:) = sqrt((x(i,:)'-x_hat(i,:)').^2/N);
-end
-
-RMS_RKF = zeros(3,N+1);
-for i=1:3
-    RMS_RKF(i,:) = sqrt((x(i,:)'-x_hat_RKF(i,:)').^2/N);
-end
-imp = zeros(3,1);
-for i = 1:3
-    imp(i) = 100-100/mean(RMS_KF(i,:))*mean(RMS_RKF(i,:));
-    fprintf('\nRMS error of state %i estimate is reduced by %.2f percent.\n',i,imp(i))
-end
-%%
+%% plotting
 figure(1)
-subplot(311)
-plot(0:N, RMS_KF(1,:),'r','LineWidth',1.2), title(['RMS Error state x(',int2str(1),')'], 'FontSize', 12)
-hold on; plot(0:N, RMS_RKF(1,:),'b','LineWidth',1.2);
-legend('KF','RKF');
-xlim([250 500]);
-xlabel('Time step t'),ylabel('RMS Error Maginute')
-subplot(312)
-plot(0:N, RMS_KF(2,:),'r','LineWidth',1.2), title(['RMS Error state x(',int2str(2),')'], 'FontSize', 12)
-hold on; plot(0:N, RMS_RKF(2,:),'b','LineWidth',1.2);
-legend('KF','RKF');
-xlim([250 500]);
-xlabel('Time step t'),ylabel('RMS Error Maginute')
-subplot(313)
-plot(0:N, RMS_KF(3,:),'r','LineWidth',1.2), title(['RMS Error state x(',int2str(3),')'], 'FontSize', 12)
-hold on; plot(0:N, RMS_RKF(3,:),'b','LineWidth',1.2);
-legend('KF','RKF');
-xlim([250 500]);
-xlabel('Time step t'),ylabel('RMS Error Maginute')
+hold on
+box on 
+set(gca,'linewidth',2,'fontsize',12,'fontweight','bold')
+plot(0:Ts:TSim,Y_Records(1,:),'r','linewidth',2),xlabel('time [s]'),ylabel('y_1')
+plot(0:Ts:TSim,0.5*ones(NSim+1),'b--','linewidth',2)
+plot(0:Ts:TSim,-0.5*ones(NSim+1),'b--','linewidth',2)
+plot(0:Ts:TSim,zeros(NSim+1),'b','linewidth',2)
 
 
+figure(2)
+hold on 
+box on 
+set(gca,'linewidth',2,'fontsize',12,'fontweight','bold')
+plot(0:Ts:TSim,Y_Records(2,:),'r','linewidth',2),xlabel('time [s]'),ylabel('y_2'),
+plot(0:Ts:TSim,Ref_Records(2,:),'b','linewidth',2)
+
+figure(3)
+hold on
+box on 
+set(gca,'linewidth',2,'fontsize',12,'fontweight','bold')
+plot(0:Ts:TSim-Ts,U_Records(1,:),'r','linewidth',2),ylim([-30,30]),xlabel('time [s]'),ylabel('u_1')
+
+plot(0:Ts:TSim,25*ones(NSim+1),'b--','linewidth',2)
+plot(0:Ts:TSim,-25*ones(NSim+1),'b--','linewidth',2)
+
+figure(4)
+hold on
+box on 
+set(gca,'linewidth',2,'fontsize',12,'fontweight','bold')
+plot(0:Ts:TSim-Ts,U_Records(2,:),'r','linewidth',2),ylim([-30,30]), xlabel('time [s]'),ylabel('u_2')
+plot(0:Ts:TSim,25*ones(NSim+1),'b--','linewidth',2)
+plot(0:Ts:TSim,-25*ones(NSim+1),'b--','linewidth',2)
+%%
+figure(5)
+plot(0:Ts:TSim-Ts,Runtime_Records)
+mean(Runtime_Records)

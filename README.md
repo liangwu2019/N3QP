@@ -20,4 +20,9 @@ where $\alpha,\beta,\eta,\delta$ are \textit{data-independent} constants, thereb
 (4) shows that the proposed $O(n^3)$-time-complexity algorithm is simple to implement and matrix-free in the iterative procedures.
 
 ## Numerical Validations
-#### Validation of number of iterations and rank-1 updates
+#### (1) Validation of number of iterations and rank-1 updates
+<img width="479" alt="image" src="https://github.com/user-attachments/assets/41505dab-a47d-45cc-b2e4-5b76d2100779" />
+
+<img width="487" alt="image" src="https://github.com/user-attachments/assets/395e9bce-d0d3-4716-b26f-1e24eb76fbb7" />
+
+

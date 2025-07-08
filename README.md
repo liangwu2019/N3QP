@@ -25,4 +25,7 @@ where $\alpha,\beta,\eta,\delta$ are \textit{data-independent} constants, thereb
 
 <img width="487" alt="image" src="https://github.com/user-attachments/assets/395e9bce-d0d3-4716-b26f-1e24eb76fbb7" />
 
+#### (2) Numerical comparison of Algorithms 1 ($O(n^{3.5)}$) and 2 ($O(n^{3)}$)
+<img width="495" alt="image" src="https://github.com/user-attachments/assets/6bfd7c0a-39ef-4ab5-8afb-bc4ba5b1a922" />
+
 

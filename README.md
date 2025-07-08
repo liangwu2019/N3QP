@@ -1,6 +1,8 @@
 # A Quadratic Programming Algorithm with $O(n^3)$ Time Complexity 
 This is the code repository for https://arxiv.org/pdf/2507.04515
 
+Our manuscript has four main contributions:
+
 (1) demonstrates how to transform a general strictly convex QP, a Lasso problem, and a support vector machine (or regression) into a Box-QP, highlighting the broad applicability of the approach.
 
 (2) develops a unified and simple proof framework for feasible IPM algorithms with \textit{exact Newton step} and \textit{approximated Newton step}, respectively, resulting in $O(n^{3.5})$ and $O(n^3)$ time complexity.

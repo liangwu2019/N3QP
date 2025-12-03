@@ -25,7 +25,8 @@ where $\alpha,\beta,\eta,\delta$ are data-independent constants, thereby being a
 
 <img width="487" alt="image" src="https://github.com/user-attachments/assets/395e9bce-d0d3-4716-b26f-1e24eb76fbb7" />
 
-#### (2) Numerical comparison of Algorithms 1 ($O(n^{3.5)}$) and 2 ($O(n^{3)}$)
-<img width="495" alt="image" src="https://github.com/user-attachments/assets/6bfd7c0a-39ef-4ab5-8afb-bc4ba5b1a922" />
+#### (2) Numerical comparison of Algorithms 1 ($O(n^{3.5)}$), Algorithm 2 ($O(n^{3)}$, Ipopt, and OSQP)
+<img width="991" height="773" alt="image" src="https://github.com/user-attachments/assets/bdae1a21-2f1e-45fd-8a09-b84a23be02ad" />
+
 
 

@@ -9,7 +9,8 @@ Our manuscript has four main contributions:
 
 (3)  proves that the proposed $O(n^3)$-time-complexity algorithm has an exact and data-independent number of iterations   
 
-<img width="273" alt="image" src="https://github.com/user-attachments/assets/13198375-3a04-4b80-a09f-74d6a28faadb" />
+<img width="188" height="66" alt="image" src="https://github.com/user-attachments/assets/62fdb8ab-3476-4708-a412-732831c2be8a" />
+
 
 and the data-independent total number of rank-1 updates bounded by
 
